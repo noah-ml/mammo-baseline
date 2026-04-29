@@ -86,7 +86,7 @@ python train_baseline.py \
 ## Model
 
 - ResNet-50 pretrained on ImageNet (`torchvision.models.ResNet50_Weights.DEFAULT`)
-- Final layer replaced with `nn.Linear(2048, 1)` — single logit output
+- Final layer replaced with `nn.Linear(2048, 1)` for single logit output
 - Loss: `BCEWithLogitsLoss`
 - Optimizer: AdamW (lr=1e-4, weight_decay=1e-4)
 - Scheduler: CosineAnnealingLR
