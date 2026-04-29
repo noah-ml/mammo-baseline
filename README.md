@@ -3,7 +3,7 @@
 ResNet-50 baseline classifier for mammography screening on the [VinDr-Mammo](https://vindr.ai/datasets/mammo) dataset.
 Binary classification: BI-RADS 1/2 (negative) vs BI-RADS 4/5 (positive).
 
-Part of the M.Sc. thesis *"Quantitative Analyse des Einflusses von Bildqualitätsdegradation auf die Robustheit neuronaler Netze in der Mammographie"* (TU Berlin / PTB).
+Part of the M.Sc. thesis *"Quantitative Assessment of Image Quality Degradation and Its Impact on Neural Network Robustness in Mammographic Image Analysis"* (TU Berlin / PTB).
 
 ---
 
