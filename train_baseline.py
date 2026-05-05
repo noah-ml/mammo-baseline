@@ -4,7 +4,7 @@ train_baseline.py
 =================
 
 ResNet-50 baseline classifier for VinDr-Mammo (binary: BI-RADS 1/2 vs 4/5).
-Raw PyTorch — no Lightning.
+Raw PyTorch, no Lightning.
 
 Usage
 -----
