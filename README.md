@@ -1,4 +1,4 @@
-# mammo-baseline-50
+# mammo-baseline
 
 ResNet-50 baseline classifier for mammography screening on the [VinDr-Mammo](https://vindr.ai/datasets/mammo) dataset.
 Binary classification: BI-RADS 1/2 (negative) vs BI-RADS 4/5 (positive).
