@@ -504,7 +504,8 @@ def plot_combined_dashboard(
     ax.set_title("Validation AUC over Training")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("AUC")
-    ax.legend()
+    if pairs:
+        ax.legend()
 
     # Text summary
     ax = axes[1, 1]

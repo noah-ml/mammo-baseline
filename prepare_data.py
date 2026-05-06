@@ -291,9 +291,9 @@ def print_distribution(df: pd.DataFrame) -> None:
               f"pos_rate={n_pos / max(1, len(sub)):.1%})")
         mfr_counts = sub["manufacturer"].value_counts().to_dict()
         print(f"    Manufacturer : {mfr_counts}")
-        if "breast_density" in sub.columns:
-            den_counts = sub["breast_density"].value_counts().to_dict()
-            print(f"    Density      : {den_counts}")
+        density_col = next((c for c in ("breast_density", "density") if c in sub.columns), None)
+        if density_col:
+            print(f"    Density      : {sub[density_col].value_counts().to_dict()}")
     print()
 
 
