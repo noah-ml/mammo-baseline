@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# Data and outputs
+processed_npy/
+output/
+*.npy
+*.dicom
+
+# Logs and checkpoints
+*.pth
+*.ckpt
+training_log.csv
+test_predictions.csv
+
+# Plots
+*.png
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
