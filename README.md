@@ -78,6 +78,9 @@ python train_baseline.py \
     --epochs 50 \
     --batch-size 32 \
     --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --label-smoothing 0.05 \
+    --patience 7 \
     --seed 42
 ```
 
@@ -86,10 +89,10 @@ python train_baseline.py \
 ## Model
 
 - ResNet-50 pretrained on ImageNet (`torchvision.models.ResNet50_Weights.DEFAULT`)
-- Final layer replaced with `nn.Linear(2048, 1)` for single logit output
-- Loss: `BCEWithLogitsLoss`
-- Optimizer: AdamW (lr=1e-4, weight_decay=1e-4)
-- Scheduler: CosineAnnealingLR
+- Final layer replaced with `Dropout(0.4) → Linear(2048, 1)`
+- Loss: `BCEWithLogitsLoss` with label smoothing (ε = 0.05, train only)
+- Optimizer: AdamW with differential learning rates — backbone `lr × 0.1`, head `lr` (default 1e-4); weight decay 1e-4
+- Scheduler: 5-epoch linear warmup (start factor 0.1) → CosineAnnealingLR via `SequentialLR`
 - Class imbalance handled via `ImbalancedDatasetSampler` on the training loader
 - Early stopping: patience 7 on validation AUC
 
@@ -110,10 +113,14 @@ After training, `--output-dir` contains:
 | File | Description |
 |---|---|
 | `best_model.pth` | Checkpoint with highest validation AUC |
-| `training_log.csv` | Per-epoch train loss, val loss, val AUC |
+| `training_log.csv` | Per-epoch train loss, val loss, val AUC, learning rate |
 | `test_predictions.csv` | Per-image predicted probabilities on the test set |
 | `roc_curve.png` | ROC curve |
 | `reliability_diagram.png` | Calibration / reliability diagram |
+| `loss_curves.png` | Train vs val loss with best-epoch marker |
+| `lr_schedule.png` | Learning rate per epoch (shows warmup ramp) |
+| `auc_curve.png` | Validation AUC per epoch with best-epoch marker |
+| `combined_dashboard.png` | 2×2 grid of the above plots + hyperparameter summary |
 
 ### Metrics reported
 
