@@ -4,7 +4,7 @@ train_baseline.py
 =================
 
 ResNet-50 baseline classifier for VinDr-Mammo (binary: BI-RADS 1/2 vs 4/5).
-Raw PyTorch, no Lightning.
+Raw PyTorch — no Lightning.
 
 Usage
 -----
@@ -152,7 +152,10 @@ def build_model(device: torch.device) -> nn.Module:
     single-logit output for binary classification.
     """
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    model.fc = nn.Linear(2048, 1)
+    model.fc = nn.Sequential(
+        nn.Dropout(0.4),
+        nn.Linear(2048, 1),
+    )
     return model.to(device)
 
 
@@ -166,6 +169,7 @@ def train_epoch(
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    label_smoothing: float = 0.0,
 ) -> float:
     """Run one training epoch; returns mean loss."""
     model.train()
@@ -175,6 +179,8 @@ def train_epoch(
     for images, labels in tqdm(loader, desc="  train", leave=False):
         images = images.to(device)
         labels = labels.to(device).unsqueeze(1)
+        if label_smoothing > 0.0:
+            labels = labels * (1.0 - label_smoothing) + label_smoothing / 2.0
 
         optimizer.zero_grad()
         logits = model(images)
@@ -384,6 +390,148 @@ def plot_reliability_diagram(
 
 
 # ---------------------------------------------------------------------------
+# Plots (training diagnostics)
+# ---------------------------------------------------------------------------
+
+def plot_loss_curves(log_rows: list[dict], save_path: Path) -> None:
+    plt.style.use("seaborn-v0_8-whitegrid")
+    epochs      = [r["epoch"]      for r in log_rows]
+    train_loss  = [r["train_loss"] for r in log_rows]
+    val_loss    = [r["val_loss"]   for r in log_rows]
+    best_idx    = int(np.argmin(val_loss))
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(epochs, train_loss, color="steelblue",  label="train_loss")
+    ax.plot(epochs, val_loss,   color="darkorange",  label="val_loss")
+    ax.plot(epochs[best_idx], val_loss[best_idx], "r*", ms=12,
+            label=f"best val_loss (epoch {epochs[best_idx]})")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.set_title("Training vs Validation Loss")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+
+
+def plot_lr_schedule(log_rows: list[dict], save_path: Path) -> None:
+    plt.style.use("seaborn-v0_8-whitegrid")
+    epochs = [r["epoch"] for r in log_rows]
+    lrs    = [r["lr"]    for r in log_rows]
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(epochs, lrs, color="steelblue")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Learning Rate")
+    ax.set_title("Learning Rate Schedule")
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+
+
+def plot_auc_curve(log_rows: list[dict], save_path: Path) -> None:
+    plt.style.use("seaborn-v0_8-whitegrid")
+    pairs = [
+        (r["epoch"], r["val_auc"])
+        for r in log_rows
+        if not (isinstance(r["val_auc"], float) and math.isnan(r["val_auc"]))
+    ]
+    if not pairs:
+        return
+    v_epochs, v_aucs = zip(*pairs)
+    best_idx = int(np.argmax(v_aucs))
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(v_epochs, v_aucs, color="steelblue", label="val_auc")
+    ax.plot(v_epochs[best_idx], v_aucs[best_idx], "r*", ms=12,
+            label=f"best AUC (epoch {v_epochs[best_idx]})")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("AUC")
+    ax.set_title("Validation AUC over Training")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+
+
+def plot_combined_dashboard(
+    log_rows: list[dict],
+    args: argparse.Namespace,
+    best_val_auc: float,
+    save_path: Path,
+) -> None:
+    plt.style.use("seaborn-v0_8-whitegrid")
+    epochs     = [r["epoch"]      for r in log_rows]
+    train_loss = [r["train_loss"] for r in log_rows]
+    val_loss   = [r["val_loss"]   for r in log_rows]
+    lrs        = [r["lr"]         for r in log_rows]
+    pairs = [
+        (r["epoch"], r["val_auc"])
+        for r in log_rows
+        if not (isinstance(r["val_auc"], float) and math.isnan(r["val_auc"]))
+    ]
+
+    best_loss_idx  = int(np.argmin(val_loss))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+
+    # Loss curves
+    ax = axes[0, 0]
+    ax.plot(epochs, train_loss, color="steelblue",  label="train_loss")
+    ax.plot(epochs, val_loss,   color="darkorange",  label="val_loss")
+    ax.plot(epochs[best_loss_idx], val_loss[best_loss_idx], "r*", ms=12)
+    ax.set_title("Training vs Validation Loss")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.legend()
+
+    # LR schedule
+    ax = axes[0, 1]
+    ax.plot(epochs, lrs, color="steelblue")
+    ax.set_title("Learning Rate Schedule")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Learning Rate")
+
+    # AUC curve
+    ax = axes[1, 0]
+    if pairs:
+        v_epochs, v_aucs = zip(*pairs)
+        best_auc_idx = int(np.argmax(v_aucs))
+        ax.plot(v_epochs, v_aucs, color="steelblue", label="val_auc")
+        ax.plot(v_epochs[best_auc_idx], v_aucs[best_auc_idx], "r*", ms=12)
+        best_auc_epoch = v_epochs[best_auc_idx]
+    else:
+        best_auc_epoch = "N/A"
+    ax.set_title("Validation AUC over Training")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("AUC")
+    ax.legend()
+
+    # Text summary
+    ax = axes[1, 1]
+    ax.axis("off")
+    summary = "\n".join([
+        f"Best val AUC:     {best_val_auc:.4f}  (epoch {best_auc_epoch})",
+        f"Best val loss:    {val_loss[best_loss_idx]:.4f}  (epoch {epochs[best_loss_idx]})",
+        f"Final train loss: {train_loss[-1]:.4f}",
+        f"Epochs trained:   {len(log_rows)}",
+        "",
+        "Hyperparameters",
+        f"  lr:               {args.lr}",
+        f"  weight_decay:     {args.weight_decay}",
+        f"  dropout:          0.4",
+        f"  label_smoothing:  {args.label_smoothing}",
+        f"  patience:         {args.patience}",
+    ])
+    ax.text(0.05, 0.95, summary, transform=ax.transAxes,
+            fontsize=9, verticalalignment="top", fontfamily="monospace")
+
+    fig.suptitle("Training Dashboard", fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -401,9 +549,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch-size",  type=int,   default=32)
     p.add_argument("--lr",          type=float, default=1e-4)
     p.add_argument("--weight-decay",type=float, default=1e-4)
-    p.add_argument("--patience",    type=int,   default=7,
+    p.add_argument("--patience",       type=int,   default=7,
                    help="Early stopping patience (epochs without val AUC improvement)")
-    p.add_argument("--seed",        type=int,   default=42)
+    p.add_argument("--label-smoothing", type=float, default=0.05,
+                   help="Label smoothing epsilon for BCEWithLogitsLoss (0 = disabled)")
+    p.add_argument("--seed",           type=int,   default=42)
     p.add_argument("--num-workers", type=int,   default=4)
     return p.parse_args()
 
@@ -457,11 +607,23 @@ def main() -> None:
     # --- Model, loss, optimizer, scheduler ---
     model     = build_model(device)
     criterion = nn.BCEWithLogitsLoss()
+    backbone_params = [p for n, p in model.named_parameters() if not n.startswith("fc")]
+    head_params     = [p for n, p in model.named_parameters() if n.startswith("fc")]
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+        [
+            {"params": backbone_params, "lr": args.lr * 0.1},
+            {"params": head_params,     "lr": args.lr},
+        ],
+        weight_decay=args.weight_decay,
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=args.epochs
+    _warmup = torch.optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=0.1, total_iters=5
+    )
+    _cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=max(args.epochs - 5, 1)
+    )
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer, schedulers=[_warmup, _cosine], milestones=[5]
     )
 
     # --- Training loop ---
@@ -475,7 +637,8 @@ def main() -> None:
     for epoch in range(args.epochs):
         print(f"Epoch {epoch + 1}/{args.epochs}")
 
-        train_loss = train_epoch(model, loader_train, criterion, optimizer, device)
+        current_lr = optimizer.param_groups[1]["lr"]
+        train_loss = train_epoch(model, loader_train, criterion, optimizer, device, args.label_smoothing)
         val_loss, val_auc = validate_epoch(model, loader_val, criterion, device)
         scheduler.step()
 
@@ -487,6 +650,7 @@ def main() -> None:
             "train_loss": train_loss,
             "val_loss":   val_loss,
             "val_auc":    val_auc,
+            "lr":         current_lr,
         })
 
         if not math.isnan(val_auc) and val_auc > best_val_auc:
@@ -512,6 +676,12 @@ def main() -> None:
     log_csv = args.output_dir / "training_log.csv"
     pd.DataFrame(log_rows).to_csv(log_csv, index=False)
     print(f"\nTraining log saved: {log_csv}")
+
+    plot_loss_curves(log_rows, args.output_dir / "loss_curves.png")
+    plot_lr_schedule(log_rows, args.output_dir / "lr_schedule.png")
+    plot_auc_curve(log_rows, args.output_dir / "auc_curve.png")
+    plot_combined_dashboard(log_rows, args, best_val_auc, args.output_dir / "combined_dashboard.png")
+    print(f"  Training plots saved to {args.output_dir}/")
 
     # --- Test evaluation ---
     print("\nLoading best checkpoint for test evaluation ...")
